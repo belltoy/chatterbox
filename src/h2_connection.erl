@@ -784,17 +784,17 @@ route_frame(
       stream_id=StreamId,
       type=?RST_STREAM
       },
-   _Payload},
+   Payload},
   #connection{} = Conn) ->
-    %% TODO: anything with this?
-    %% EC = h2_frame_rst_stream:error_code(Payload),
     Streams = Conn#connection.streams,
     Stream = h2_stream_set:get(StreamId, Streams),
     case h2_stream_set:type(Stream) of
         idle ->
             go_away(?PROTOCOL_ERROR, Conn);
+        active ->
+            recv_r(Stream, Conn, h2_frame_rst_stream:error_code(Payload)),
+            {next_state, connected, Conn};
         _Stream ->
-            %% TODO: RST_STREAM support
             {next_state, connected, Conn}
     end;
 route_frame({H=#frame_header{}, _P},
@@ -1716,6 +1716,20 @@ recv_h(Stream,
             %% a stream FSM (probably). On the off chance we didn't,
             %% we'll throw this
             rst_stream(Stream, ?STREAM_CLOSED, Conn)
+    end.
+
+-spec recv_r(Stream :: h2_stream_set:stream(),
+             Conn :: connection(),
+             Code :: integer()) ->
+                    ok.
+recv_r(Stream, _Conn, ErrorCode) ->
+    case h2_stream_set:type(Stream) of
+        active ->
+            Pid = h2_stream_set:pid(Stream),
+            %% TODO: handle unknown or unsupported error codes
+            h2_stream:send_event(Pid, {recv_r, ErrorCode});
+        _ ->
+            ok
     end.
 
 -spec send_h(
