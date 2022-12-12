@@ -1427,8 +1427,6 @@ go_away(ErrorCode,
                                        stream_id=0
                                       }, GoAway}),
     socksend(Conn, GoAwayBin),
-    %% TODO: why is this sending a string?
-    gen_statem:cast(self(), io_lib:format("GO_AWAY: ErrorCode ~p", [ErrorCode])),
     {next_state, closing, Conn}.
 
 %% rst_stream/3 looks for a running process for the stream. If it
