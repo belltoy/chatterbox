@@ -93,6 +93,11 @@
             CallbackState :: callback_state())->
     {ok, NewState :: callback_state()}.
 
+-callback on_receive_reset_stream(
+            ErrorCode :: error_code(),
+            CallbackState :: callback_state()) ->
+    {ok, NewState :: callback_state()}.
+
 -callback on_end_stream(
             CallbackState :: callback_state()) ->
     {ok, NewState :: callback_state()}.
@@ -307,6 +312,13 @@ reserved_local(cast, {send_t, Headers},
      Stream#stream_state{
        response_trailers=Headers
       }};
+reserved_local(cast, {recv_r, ErrorCode},
+     #stream_state{
+        callback_mod=CB,
+        callback_state=CallbackState
+       }=Stream) ->
+    {ok, NewCBState} = callback(CB, on_receive_reset_stream, [ErrorCode], CallbackState),
+    {next_state, closed, Stream#stream_state{callback_state=NewCBState}, 0};
 reserved_local(Type, Event, State) ->
     handle_event(Type, Event, State).
 
@@ -334,6 +346,13 @@ reserved_remote(cast, {recv_t, Headers},
        response_headers=Headers,
        callback_state=NewCBState
       }};
+reserved_remote(cast, {recv_r, ErrorCode},
+     #stream_state{
+        callback_mod=CB,
+        callback_state=CallbackState
+       }=Stream) ->
+    {ok, NewCBState} = callback(CB, on_receive_reset_stream, [ErrorCode], CallbackState),
+    {next_state, closed, Stream#stream_state{callback_state=NewCBState}, 0};
 reserved_remote(Type, Event, State) ->
     handle_event(Type, Event, State).
 
@@ -355,6 +374,14 @@ open(cast, recv_es,
              closed,
              Stream}
     end;
+
+open(cast, {recv_r, ErrorCode},
+     #stream_state{
+        callback_mod=CB,
+        callback_state=CallbackState
+       }=Stream) ->
+    {ok, NewCBState} = callback(CB, on_receive_reset_stream, [ErrorCode], CallbackState),
+    {next_state, closed, Stream#stream_state{callback_state=NewCBState}, 0};
 
 open(cast, {recv_data,
       {#frame_header{
@@ -584,6 +611,13 @@ half_closed_remote(cast,
 
 half_closed_remote(_Type, {send_trailers, Trailers}, State) ->
     send_trailers(half_closed_remote, Trailers, State);
+half_closed_remote(cast, {recv_r, ErrorCode},
+     #stream_state{
+        callback_mod=CB,
+        callback_state=CallbackState
+       }=Stream) ->
+    {ok, NewCBState} = callback(CB, on_receive_reset_stream, [ErrorCode], CallbackState),
+    {next_state, closed, Stream#stream_state{callback_state=NewCBState}, 0};
 half_closed_remote(cast, _,
        #stream_state{}=Stream) ->
     rst_stream_(?STREAM_CLOSED, Stream);
@@ -697,6 +731,14 @@ half_closed_local(cast, recv_es,
 half_closed_local(cast, {send_t, _Trailers},
                   #stream_state{}) ->
     keep_state_and_data;
+half_closed_local(cast, {recv_r, ErrorCode},
+     #stream_state{
+        callback_mod=CB,
+        callback_state=CallbackState
+       }=Stream) ->
+    {ok, NewCBState} = callback(CB, on_receive_reset_stream, [ErrorCode], CallbackState),
+    {next_state, closed, Stream#stream_state{callback_state=NewCBState}, 0};
+
 half_closed_local(_, _,
        #stream_state{}=Stream) ->
     rst_stream_(?STREAM_CLOSED, Stream);
